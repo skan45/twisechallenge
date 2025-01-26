@@ -1,7 +1,7 @@
 import requests
 
 def talk_to_ollama(prompt):
-    url = "http://localhost:11434/api/chat"
+    url = "http://127.0.0.1:11434"
     headers = {"Content-Type": "application/json"}
     payload = {
         "model": "your_model_name",  # Replace with the model name you want to use (e.g., 'llama' or custom).
