@@ -1,60 +1,50 @@
+import pandas as pd
 import numpy as np
-import csv
-import json
-from sentence_transformers import SentenceTransformer, util
-import torch  # To handle tensor data types
+from sentence_transformers import SentenceTransformer
 
-# Load a pre-trained model for sentence embeddings (local model)
-model = SentenceTransformer('paraphrase-MiniLM-L6-v2')  # You can choose another model as well
+# Load the model for embedding (ensure it's the same model used to encode the FAQ data)
+def top_three(input):
+    model = SentenceTransformer('all-MiniLM-L6-v2')  # Replace with your model
 
-# Function to fetch embeddings for a query using the local model
-def get_embeddings(text):
-    return model.encode(text)  # No need to convert to list if you're working directly with embeddings
+    # Load the FAQ CSV file with embeddings
+    faq_df = pd.read_csv('faq.csv')
 
-# Function to get the best answer from CSV based on cosine similarity
-def get_answer_from_csv(user_input):
-    # Compute the embedding for the user's input
-    user_embedding = get_embeddings(user_input)
+    # Convert the embeddings from string back to numpy arrays
+    faq_df['embeddings'] = faq_df['embeddings'].apply(lambda x: np.fromstring(x.strip('[]'), sep=','))
+
+    # Define a function to calculate cosine similarity
+    def cosine_similarity_manual(vec1, vec2):
+        dot_product = np.dot(vec1, vec2)
+        norm_vec1 = np.linalg.norm(vec1)
+        norm_vec2 = np.linalg.norm(vec2)
+        return dot_product / (norm_vec1 * norm_vec2)
+
+    # Encode the user input to get the embedding
+    user_embedding = model.encode([input], convert_to_tensor=True).numpy().flatten()
+
+    # Compute cosine similarity between the user input embedding and all FAQ embeddings
+    cos_similarities = []
+    for idx, row in faq_df.iterrows():
+        faq_embedding = np.array(row['embeddings'])  # Convert the embedding back to numpy array
+        sim = cosine_similarity_manual(user_embedding, faq_embedding)  # Use manual cosine similarity
+        cos_similarities.append((row['id'], row['category'], row['question'], row['answer'],sim,row['link']))
+
+    # Sort the similarities in descending order to get the most similar questions
+    cos_similarities.sort(key=lambda x: x[4], reverse=True)
+
+    # Get the top 3 similar FAQs
+    top_three = cos_similarities[:2]
     
-    # Convert user_embedding to a PyTorch tensor with float32 dtype if it's not already
-    user_embedding = torch.tensor(user_embedding, dtype=torch.float32)
+    # Prepare the output by extracting questions and answers
+    top_three_questions = [entry[2] for entry in top_three]
+    top_three_answers = [entry[3] for entry in top_three]
+    n = top_three[0][5]
+    print (n)
+    # Optionally, print the results
+    print(top_three_questions)
+    print(top_three_answers)
     
-    # Read questions, answers, and embeddings from a CSV file (adjust path if needed)
-    questions_answers = []
-    with open('faq_with_embeddings.csv', 'r', encoding='utf-8') as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            questions_answers.append(row)
-    
-    best_similarity = -1
-    best_answer = None
-    
-    # Loop through each Q&A pair and compare cosine similarity
-    for qa in questions_answers:
-        question = qa["question"]
-        answer = qa["answer"]
-        
-        # Parse embeddings from the CSV (stored as a string, so we need to convert it to a numpy array)
-        stored_embedding = np.array(json.loads(qa["embeddings"]))  # Embeddings are stored as a JSON string in the CSV
-        
-        # Convert stored_embedding to torch tensor and ensure the same dtype as user_embedding
-        stored_embedding = torch.tensor(stored_embedding, dtype=torch.float32)
-        
-        # Calculate cosine similarity between user query and stored question embeddings using pytorch_cos_sim
-        similarity = util.pytorch_cos_sim(user_embedding, stored_embedding)[0][0].item()  # Convert tensor to scalar
-        
-        # If this similarity is the best so far, store it
-        if similarity > best_similarity:
-            best_similarity = similarity
-            best_answer = answer
-    
-    return best_answer
+    return [top_three_questions, top_three_answers,n]
 
-# Example usage:
-user_input = "comment mettre à jour mes informations personnelles sur le système de l'établissement ?"
-
-# Get the answer
-answer = get_answer_from_csv(user_input)
-
-# Print the answer
-print(f"Answer: {answer}")
+# Test the function with a sample input
+top_three("Quelle est la mission de ihec ?")

@@ -4,7 +4,7 @@ from flask_cors import CORS
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes and origins
-from pipline1 import top_three
+from pipeline import top_three
 def ask_ollama(prompt):
     # Refined prompt to enhance the chatbot's responses
     a,b,x=top_three(prompt) 
