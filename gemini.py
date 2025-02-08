@@ -1,13 +1,16 @@
-from flask import Flask, render_template, request, jsonify, session
+from flask import Flask, request, jsonify, session
 import requests
 import os
 from dotenv import load_dotenv  # Import dotenv to load environment variables
+from flask_cors import CORS  
+
 
 # Load environment variables from .env file
 load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = os.getenv("FLASK_SECRET_KEY", "your_default_secret_key")  # Use env variable or default
+CORS(app) 
+app.secret_key = os.getenv("FLASK_SECRET_KEY", "your_default_secret_key")
 
 # Get API key from environment variables
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
@@ -65,11 +68,6 @@ def generate_response(prompt_text):
     else:
         return f"Error: {response.status_code} - {response.text}"
 
-# Route for the home page
-@app.route("/")
-def home():
-    return render_template("index.html")
-
 # Route to handle chatbot responses
 @app.route("/chat", methods=["POST"])
 def chat():
@@ -88,10 +86,6 @@ def chat():
 
     return jsonify({"response": bot_response, "chat_history": session["chat_history"]})
 
-# Route to get full chat history
-@app.route("/history", methods=["GET"])
-def get_chat_history():
-    return jsonify({"chat_history": session.get("chat_history", [])})
 
 # Run the Flask app
 if __name__ == "__main__":
