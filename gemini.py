@@ -1,52 +1,53 @@
 from flask import Flask, render_template, request, jsonify, session
 import requests
-import json
-from pipeline import top_five
+import os
+from dotenv import load_dotenv  # Import dotenv to load environment variables
+
+# Load environment variables from .env file
+load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = "your_secret_key"  # Required for session management
+app.secret_key = os.getenv("FLASK_SECRET_KEY", "your_default_secret_key")  # Use env variable or default
 
-GEMINI_API_KEY = "AIzaSyAwRQZ2Rb9VfWmTWta8aqk_6YJX_1KdYrw"
-url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + GEMINI_API_KEY
+# Get API key from environment variables
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+if not GEMINI_API_KEY:
+    raise ValueError("No GEMINI_API_KEY found in environment variables.")
 
-# Define the headers
+# Construct API URL
+url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+
+# Define headers
 headers = {
     "Content-Type": "application/json"
 }
 
 prompt_count = 0
 
+# Static chat history (for demonstration purposes)
+static_chat_history = [
+    {"role": "user", "content": "Hello, I have been feeling very tired lately."},
+    {"role": "assistant", "content": "I'm sorry to hear that. Can you tell me more about your symptoms? How long have you been feeling this way?"},
+    {"role": "user", "content": "It's been about two weeks. I also have trouble sleeping."},
+    {"role": "assistant", "content": "Thank you for sharing. Have you noticed any other symptoms, such as headaches or changes in appetite?"}
+]
+
 def generate_response(prompt_text):
     global prompt_count
-    prompt_count += 1  
-    context_list, answers = top_five(prompt_text)
-    system_instruction = (
-        "You are a medical therapist assistant. Your job is to diagnose patients "
-        "based on their symptoms and provide advice while reminding them to seek professional help.\n\n"
-        "Patient's symptoms and concerns:\n"
-    )
+    prompt_count += 1
 
-    # Integrate retrieved context and previous responses
-    context_text = "\n".join(f"Context {i+1}: {context}" for i, context in enumerate(context_list[:2]))
-    answer_text = "\n".join(f"Answer {i+1}: {answer}" for i, answer in enumerate(answers[:2]))
+    # Add the new user message to the static chat history
+    static_chat_history.append({"role": "user", "content": prompt_text})
 
-    # Add diagnostic response every second prompt
-    if prompt_count % 2 == 0:
-        diagnostic_instruction = "\n\nBased on the above information, provide a detailed diagnosis and recommendations."
-    else:
-        diagnostic_instruction = "\n\nAsk the patient for more details if needed."
-
-    # Combine everything into a single prompt
-    final_prompt = (
-        f"{system_instruction}{prompt_text}\n\n"
-        f"Relevant Medical Context:\n{context_text}\n\n"
-        f"Previous Responses:\n{answer_text} "
-        f"{diagnostic_instruction}"
-    )
+    # Prepare the conversation history for the API request
+    conversation_history = [
+        {"role": "user" if msg["role"] == "user" else "assistant", "parts": [{"text": msg["content"]}]}
+        for msg in static_chat_history
+    ]
 
     # Define the request payload for Gemini API
     data = {
-        "contents": [{"parts": [{"text": final_prompt}]}]
+        "contents": conversation_history
     }
 
     # Make the POST request
@@ -55,7 +56,12 @@ def generate_response(prompt_text):
     # Check if the request was successful
     if response.status_code == 200:
         response_data = response.json()
-        return response_data['candidates'][0]['content']['parts'][0]['text']
+        bot_response = response_data['candidates'][0]['content']['parts'][0]['text']
+
+        # Add the bot's response to the static chat history
+        static_chat_history.append({"role": "assistant", "content": bot_response})
+
+        return bot_response
     else:
         return f"Error: {response.status_code} - {response.text}"
 
